@@ -16,7 +16,7 @@
 5. [Etapa 2 — Criar e configurar o Project](#5-etapa-2--criar-e-configurar-o-project)
 6. [Etapa 3 — Labels, Milestones, Issues e ciclo manual](#6-etapa-3--labels-milestones-issues-e-ciclo-manual)
 7. [Vínculo Issue ↔ Pull Request](#7-vínculo-issue--pull-request)
-8. [Workflows nativos do Project](#8-workflows-nativos-do-project)
+8. [Etapa 4 — Workflows nativos do Project](#8-etapa-4--workflows-nativos-do-project)
 9. [Referência rápida de comandos `gh`](#9-referência-rápida-de-comandos-gh)
 10. [Descobertas e pegadinhas](#10-descobertas-e-pegadinhas)
 11. [Decisões](#11-decisões)
@@ -47,8 +47,9 @@ Sugestão → Backlog → To Do → In Progress → Draft PR → In Review → A
 
 | Transição | Responsável | Situação |
 |---|---|---|
-| Issue criada → status inicial | Workflow nativo *Item added to project* | ✅ funcionando (To Do; mudará para Backlog na Etapa 4) |
-| PR vinculado → In Progress | Workflow nativo *Pull request linked to issue* | ✅ funcionando (será revisto na Etapa 4) |
+| Issue criada → entra no Project em **Backlog** | Nativos *Auto-add to project* + *Item added to project* | ✅ funcionando |
+| Issue reaberta → **To Do** | Nativo *Item reopened* | ✅ funcionando |
+| PR vinculado → In Progress | Nativo *Pull request linked to issue* | ⚪ desligado na Etapa 4 (a Action decidirá pelo `isDraft`) |
 | Draft PR → Draft PR | GitHub Actions | ⏳ Etapa 7a |
 | Ready for review → In Review | GitHub Actions | ⏳ Etapa 7b |
 | Aprovado → Approved | GitHub Actions | ⏳ Etapa 7c |
@@ -435,26 +436,71 @@ gh api graphql -f query='{ repository(owner:"OWNER", name:"REPO"){ issue(number:
 
 ---
 
-## 8. Workflows nativos do Project
+## 8. Etapa 4 — Workflows nativos do Project
 
-Menu **⋯** (canto superior direito do Project) → **Workflows**. A API permite **ler** o estado dos workflows, mas não ligá-los:
+Workflows nativos são automações **internas do Project**. Não usam GitHub Actions, não consomem minutos e não precisam de token.
+
+### 8.1 Onde configurar
+
+Menu **⋯** (canto superior direito do Project) → **Workflows**.
+
+- Em cada workflow: **Edit** → alterar → **Save** (ou **Save and turn on workflow**).
+- O interruptor **On/Off** no topo liga e desliga.
+
+> A API permite **ler** se cada workflow está ligado, mas **não** permite ligá-lo, configurá-lo ou ver para qual Status ele aponta. Também não há mutation para isso (só `deleteProjectV2Workflow`). Configuração é **somente pela interface**.
 
 ```bash
-gh api graphql -f query='{ user(login:"OWNER"){ projectV2(number:1){ workflows(first:20){ nodes{ name enabled } } } } }'
+gh api graphql -f query='{ user(login:"OWNER"){ projectV2(number:1){ workflows(first:20){ nodes{ name enabled updatedAt } } } } }'
 ```
 
-| Workflow | Padrão em projeto novo | O que faz | Avaliação |
+> O `updatedAt` **não muda** ao editar o Status de destino de um workflow já ligado. Não use esse campo para auditar configuração.
+
+### 8.2 Configuração adotada
+
+| Workflow | Padrão em projeto novo | Configuração adotada | Motivo |
 |---|---|---|---|
-| Item added to project | 🟢 ligado → *Todo* | Item novo recebe um Status | Mudar para **Backlog** (Etapa 4) |
-| Item closed | 🟢 ligado → *Done* | Issue fechada → Done | ⚠️ Inclui *not planned* (testado com a #2) |
-| Auto-close issue | 🟢 ligado | Card movido para Done → fecha a Issue | ⚠️ Arrastar para Done fecha a Issue |
-| Pull request linked to issue | 🟢 ligado → *In Progress* | PR vinculado → move a **Issue** | Não diferencia draft de pronto |
-| Pull request merged | 🟢 ligado → *Done* | Card **do PR** → Done | Sem efeito aqui (PR não vira card) |
-| Auto-add sub-issues to project | 🟢 ligado | Sub-issues entram no Project | Útil para tarefas com subtarefas |
-| Auto-add to project | a configurar | Adiciona Issues do repo automaticamente | Etapa 4 (filtro `is:issue`) |
-| Item reopened | a configurar | Issue reaberta → Status | Etapa 4 |
-| Auto-archive items | a configurar | Arquiva itens fechados após X dias | Etapa 4 |
-| Code review approved / changes requested | a configurar | Movem o card **do PR** | Não servem quando o card principal é a Issue |
+| **Auto-add to project** | desligado | 🟢 repo `github-projects-lab`, filtro `is:issue is:open` | Toda Issue nova entra no Kanban; PRs ficam de fora |
+| **Item added to project** | 🟢 → *Todo* | 🟢 → **Backlog** | Issue nova = aceita, aguardando priorização |
+| **Item reopened** | desligado | 🟢 (Issue) → **To Do** | Reaberta volta para a fila priorizada |
+| **Item closed** | 🟢 → *Done* | 🟢 → **Done** (mantido) | Inclui *not planned*, decisão aceita |
+| **Auto-close issue** | 🟢 | 🟢 (mantido) | Arrastar para Done fecha a Issue |
+| **Auto-archive items** | desligado | 🟢 `is:closed updated:<@today-14d` | Done não cresce indefinidamente no Board |
+| **Pull request linked to issue** | 🟢 → *In Progress* | ⚪ **desligado** | Não diferencia draft de pronto; a Action da Etapa 7 decide |
+| **Pull request merged** | 🟢 → *Done* | 🟢 (mantido) | Sem efeito: PRs não viram card |
+| **Auto-add sub-issues to project** | 🟢 | 🟢 (mantido) | Subtarefas entram junto com a Issue pai |
+| Code review approved / changes requested | — | não usados | Movem o card **do PR**, que não existe neste modelo |
+
+**Observações**
+
+- O **Auto-add não é retroativo**: só considera Issues criadas ou atualizadas depois de ligado.
+- O **Auto-add tem limite por plano** (no Free, poucos workflows de auto-add por Project). Um único workflow com filtro amplo atende este caso.
+- Com o *PR linked* desligado, abrir um PR **não move** a Issue até a Etapa 7. Nesse intervalo, o card é movido à mão.
+
+### 8.3 Testes executados (Issues #8 e #9)
+
+| # | Teste | Como reproduzir | Esperado | Resultado |
+|---|---|---|---|---|
+| T1 | Auto-add + status inicial | Criar Issue **sem** escolher Project (`gh issue create` sem `--project` ou pela interface) | Card aparece em **Backlog** | ✅ #9 apareceu em Backlog ~5 s depois |
+| T2 | PR não vira card | Abrir um PR / atualizar um PR | PR **não** aparece no Project | ✅ (PR desta etapa) |
+| T3 | Fechar como concluída | *Close issue* | Card → **Done** | ✅ #8 |
+| T4 | Reabrir | *Reopen issue* | Card → **To Do** | ✅ #8 |
+| T5 | Fechar como *not planned* | *Close issue* ▾ → *Close as not planned* | Card → **Done**, ícone ⊘ | ✅ #8 |
+| T6 | Auto-close | Reabrir e **arrastar o card** para Done | Issue fecha sozinha | ✅ #8 |
+| T7 | PR linked desligado | Abrir PR com `Closes #9` | Issue **não** muda de coluna | ✅ (PR desta etapa) |
+| T8 | Auto-archive | Prévia do filtro na tela do workflow | 0 itens hoje (tudo fechou há menos de 14 dias) | ✅ |
+
+### 8.4 Auditoria pela timeline
+
+```bash
+gh api graphql -f query='{ repository(owner:"OWNER", name:"REPO"){ issue(number:8){
+  timelineItems(first:50, itemTypes:[CLOSED_EVENT, REOPENED_EVENT]){ nodes{ __typename
+    ... on ClosedEvent { createdAt actor{ login } stateReason }
+    ... on ReopenedEvent { createdAt actor{ login } } } } } } }'
+```
+
+- Fechamentos e reaberturas aparecem com `stateReason` (`COMPLETED` / `NOT_PLANNED`).
+- Os eventos de Project (`AddedToProjectV2Event`, `ProjectV2ItemStatusChangedEvent`) aparecem na **interface**, mas a API **não os retornou**. Não dá para auditar mudanças de Status por essa via.
+- Quando o *Auto-close issue* fecha uma Issue, o fechamento é atribuído a **quem arrastou o card**, e não a um bot. Pela API, é indistinguível de um fechamento manual.
 
 ---
 
@@ -514,6 +560,11 @@ gh api graphql -f query='{ user(login:"OWNER"){ projectV2(number:1){ workflows(f
 | 14 | Squash merge faz `git branch -d` recusar a branch local | Conferir com `git diff` e usar `-D` |
 | 15 | Claude Code (auto mode) bloqueia `gh pr merge --admin` | Merge com bypass é decisão humana |
 | 16 | Autor do PR não pode aprovar o próprio PR | Segunda conta necessária para a Etapa 7c |
+| 17 | Configuração de workflows nativos só pela interface; a API só lê `enabled` | Documentar telas; conferir visualmente |
+| 18 | `updatedAt` do workflow não muda ao editar o Status de destino | Não serve para auditar configuração |
+| 19 | Eventos de Project não vêm na timeline via API | Auditoria de Status precisa de outro meio (ex.: log da Action) |
+| 20 | Auto-close atribui o fechamento a quem arrastou o card | Indistinguível de fechamento manual |
+| 21 | Auto-add leva alguns segundos e não é retroativo | Scripts/Actions devem tolerar o atraso |
 
 ---
 
@@ -528,20 +579,15 @@ gh api graphql -f query='{ user(login:"OWNER"){ projectV2(number:1){ workflows(f
 | Estratégia de IDs | Resolver por nome em tempo de execução; apenas `PROJECT_OWNER`/`PROJECT_NUMBER` em Variables | Renomear/recriar opções não quebra a automação |
 | Merge | Squash | Um commit por Issue na `main` |
 | Branches | `gh issue develop` | Vínculo detectável por API (`linkedBranches`) |
-
-### Pendentes (Etapa 4)
-
-| # | Decisão | Opções | Recomendação |
-|---|---|---|---|
-| 1 | Status inicial de Issue nova | Backlog / Sugestão | Backlog |
-| 2 | *Pull request linked to issue* | Reconfigurar para Draft PR / desligar e deixar a Action decidir pelo `isDraft` | Desligar |
-| 3 | *Not planned* indo para Done | Aceitar / coluna "Descartado" + Action / aceitar + Auto-archive | Aceitar + Auto-archive |
+| Status inicial de Issue nova (Etapa 4) | **Backlog** | Sugestões entram como Draft Issue, criadas à mão |
+| *Pull request linked to issue* (Etapa 4) | **Desligado** | Não diferencia draft de pronto; a Action decide pelo `isDraft` |
+| *Not planned* em Done (Etapa 4) | **Aceitar + Auto-archive (14 dias)** | O ícone da Issue mostra o motivo; o Board não acumula itens fechados |
 
 ---
 
 ## 12. Próximas etapas
 
-- [ ] Etapa 4 — Workflows nativos
+- [x] Etapa 4 — Workflows nativos
 - [ ] Etapa 5 — GraphQL na mão
 - [ ] Etapa 6 — Credencial (PAT/App) e Secrets
 - [ ] Etapa 7 — Actions: Draft PR, In Review, Approved, Merge/Closed
