@@ -17,4 +17,5 @@ Sugestão → Backlog → To Do → In Progress → Draft PR → In Review → A
 | Arquivo | Conteúdo |
 |---|---|
 | [`PLANO-LAB.md`](PLANO-LAB.md) | Análise, arquitetura, permissões e plano em etapas |
+| [`docs/MANUAL-LAB.md`](docs/MANUAL-LAB.md) | Manual reproduzível: conceitos, passo a passo, comandos, descobertas e decisões |
 | [`ROADMAP.md`](ROADMAP.md) | Roadmap fictício (projeto "Agendaí") usado como dados de migração |
