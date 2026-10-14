@@ -17,10 +17,11 @@
 6. [Etapa 3 — Labels, Milestones, Issues e ciclo manual](#6-etapa-3--labels-milestones-issues-e-ciclo-manual)
 7. [Vínculo Issue ↔ Pull Request](#7-vínculo-issue--pull-request)
 8. [Etapa 4 — Workflows nativos do Project](#8-etapa-4--workflows-nativos-do-project)
-9. [Referência rápida de comandos `gh`](#9-referência-rápida-de-comandos-gh)
-10. [Descobertas e pegadinhas](#10-descobertas-e-pegadinhas)
-11. [Decisões](#11-decisões)
-12. [Próximas etapas](#12-próximas-etapas)
+9. [Etapa 5 — GraphQL na mão](#9-etapa-5--graphql-na-mão)
+10. [Referência rápida de comandos `gh`](#10-referência-rápida-de-comandos-gh)
+11. [Descobertas e pegadinhas](#11-descobertas-e-pegadinhas)
+12. [Decisões](#12-decisões)
+13. [Próximas etapas](#13-próximas-etapas)
 
 ---
 
@@ -104,7 +105,7 @@ Project        PVT_...     "qual quadro"         ex.: PVT_kwHOFGJHpc4Bm9yu
 
 - **Item ≠ Issue.** O Item é a Issue **dentro de um Project específico**. Para mover um card, é preciso descobrir o Item ID daquela Issue naquele Project.
 - Prefixos: `PVTSSF` = single select field, `PVTIF` = iteration field, `PVTF` = campo comum.
-- Os IDs acima são **exemplos deste laboratório**. Automações não devem tê-los fixos no código: devem resolver por nome em tempo de execução (ver [Decisões](#11-decisões)).
+- Os IDs acima são **exemplos deste laboratório**. Automações não devem tê-los fixos no código: devem resolver por nome em tempo de execução (ver [Decisões](#12-decisões)).
 
 ---
 
@@ -504,7 +505,161 @@ gh api graphql -f query='{ repository(owner:"OWNER", name:"REPO"){ issue(number:
 
 ---
 
-## 9. Referência rápida de comandos `gh`
+## 9. Etapa 5 — GraphQL na mão
+
+Objetivo: executar pelo terminal, consulta por consulta, tudo o que a automação fará, antes de escrever qualquer GitHub Action.
+
+```
+evento do PR (número)
+   │ ① closingIssuesReferences
+   ▼
+Issue(s) vinculada(s)
+   │ ② projectItems (filtrado pelo Project)
+   ▼
+Item ID da Issue neste Project
+   │ ③ project → field("Status") → option("Draft PR")
+   ▼
+IDs do campo e da opção
+   │ ④ updateProjectV2ItemFieldValue
+   ▼
+card movido
+```
+
+### 9.1 Anatomia de uma chamada
+
+```bash
+gh api graphql -F owner=OWNER -F repo=REPO -F pr=10 -f query='
+query($owner: String!, $repo: String!, $pr: Int!) { ... }'
+```
+
+| Parte | Significado |
+|---|---|
+| `query($pr: Int!)` | Declara variáveis e tipos (`!` = obrigatório). Evita montar a query concatenando texto |
+| `-F` × `-f` | `-F` converte tipos (`10` → número); `-f` envia sempre como texto. Variável `Int!` exige `-F` |
+| `status: fieldValueByName(...)` | **Alias**: renomeia o campo na resposta |
+| `... on User { login }` | **Fragmento inline**: lê campos de um tipo concreto quando o campo é uma interface/união |
+| Resposta | Sucesso em `data`; falhas em `errors` (às vezes com `data` parcial) |
+
+> A query é **validada inteira antes de executar**. Um erro de schema não lê nem altera nada.
+
+### 9.2 ① PR → Issues vinculadas
+
+```graphql
+query($owner: String!, $repo: String!, $pr: Int!) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $pr) {
+      number isDraft state reviewDecision
+      closingIssuesReferences(first: 10) {
+        nodes { number title state repository { nameWithOwner } }
+      }
+    }
+  }
+}
+```
+
+- Retorna keyword (`Closes #N`) **e** vínculo manual; ignora `Refs #N`.
+- ⚠️ Um PR mergeado via **bypass** continua com `reviewDecision = REVIEW_REQUIRED`. Na lógica de status, verificar **merged antes** de aprovado.
+
+### 9.3 ② Issue → Item no Project
+
+```graphql
+query($owner: String!, $repo: String!, $issue: Int!) {
+  repository(owner: $owner, name: $repo) {
+    issue(number: $issue) {
+      projectItems(first: 10) {
+        nodes {
+          id
+          project { id number title owner { ... on User { login } ... on Organization { login } } }
+          status: fieldValueByName(name: "Status") {
+            ... on ProjectV2ItemFieldSingleSelectValue { name optionId }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+- Uma Issue em vários Projects tem **um Item por Project**. Sempre filtrar por `project.id`.
+- `owner` é a interface `ProjectV2Owner`; `login` só existe em `User`/`Organization`, por isso o fragmento (erro sem ele: `Field 'login' doesn't exist on type 'ProjectV2Owner'`).
+
+### 9.4 ③ Project, campo e opção por nome
+
+```graphql
+query($owner: String!, $number: Int!) {
+  user(login: $owner) {              # Organization: organization(login: $owner)
+    projectV2(number: $number) {
+      id
+      field(name: "Status") {
+        ... on ProjectV2SingleSelectField { id options { id name } }
+      }
+    }
+  }
+}
+```
+
+Só `owner` e `número` ficam configurados; o resto é descoberto. Renomear/recriar opções não quebra a automação — e, se a opção sumir, o erro é explícito.
+
+### 9.5 ④ Mover o card
+
+```graphql
+mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
+  updateProjectV2ItemFieldValue(input: {
+    projectId: $project
+    itemId: $item
+    fieldId: $field
+    value: { singleSelectOptionId: $option }   # ou text / number / date / iterationId
+  }) { projectV2Item { id } }
+}
+```
+
+- Altera **um campo de um Item**. A Issue não muda: nada na timeline, nenhuma notificação.
+
+### 9.6 Script `scripts/project-status.sh`
+
+Encadeia ① a ④. Será chamado pelo workflow do Actions na Etapa 7.
+
+```bash
+export PROJECT_OWNER=Gabriel-Pixaflow PROJECT_NUMBER=1 GITHUB_REPOSITORY=Gabriel-Pixaflow/github-projects-lab
+scripts/project-status.sh --pr 12 --status "Draft PR"           # Issues vinculadas ao PR
+scripts/project-status.sh --issue 4 --status Backlog --dry-run  # uma Issue, sem alterar
+```
+
+| Comportamento | Motivo |
+|---|---|
+| IDs por nome; só `PROJECT_OWNER`/`PROJECT_NUMBER` (+ `OWNER_TYPE=organization` em org) | Estratégia de IDs |
+| Retry quando o PR ainda não tem Issues vinculadas (`LINK_RETRIES`, `LINK_RETRY_DELAY`) | Vínculo é assíncrono |
+| PR → Issues → Items em **uma** consulta | Menos chamadas |
+| Item filtrado pelo Project | Issue pode estar em vários Projects |
+| Pula se o status já é o desejado | Idempotente |
+| Avisa e pula Issue fora do Project | Não cria cards por conta própria |
+| `--dry-run` | Ver o plano sem alterar |
+| Só depende do `gh` (`--jq` embutido) | Funciona igual no Windows e no runner |
+
+**Testes executados**
+
+| Cenário | Resultado |
+|---|---|
+| `--issue 4 --status Backlog --dry-run` (card em Draft PR) | `[dry-run] #4: 'Draft PR' → 'Backlog'` |
+| `--pr 10 --status Done` (#9 já em Done) | `#9 já está em 'Done'; nada a fazer.` |
+| Opção inexistente | `ERRO: opção 'Em teste' não existe no campo 'Status'`, exit 1 |
+| Sem `--status` | `ERRO: --status é obrigatório`, exit 1 |
+| Project inexistente | `gh: Could not resolve to a ProjectV2 with the number 99`, exit 1 |
+| `--issue 4 --status Backlog` real, 2× | 1ª: `'Draft PR' → 'Backlog'`; 2ª: `já está em 'Backlog'` |
+| `--pr 12 --status "Draft PR"` logo após abrir o PR #12 (simulação da Etapa 7a) | `#11: 'Backlog' → 'Draft PR'`, **sem precisar de retry** (a resolução do Project deu tempo ao vínculo). O caminho do retry ainda não foi exercitado → Etapa 8 |
+
+### 9.7 `.gitattributes`
+
+```
+*.sh  text eol=lf
+*.yml text eol=lf
+```
+
+No Windows o git converte finais de linha para CRLF; um `\r` no fim das linhas quebra o bash do runner Linux. Este arquivo força LF em scripts e workflows.
+
+---
+
+## 10. Referência rápida de comandos `gh`
 
 | Comando | Para quê |
 |---|---|
@@ -540,7 +695,7 @@ gh api graphql -f query='{ repository(owner:"OWNER", name:"REPO"){ issue(number:
 
 ---
 
-## 10. Descobertas e pegadinhas
+## 11. Descobertas e pegadinhas
 
 | # | Descoberta | Impacto |
 |---|---|---|
@@ -565,10 +720,14 @@ gh api graphql -f query='{ repository(owner:"OWNER", name:"REPO"){ issue(number:
 | 19 | Eventos de Project não vêm na timeline via API | Auditoria de Status precisa de outro meio (ex.: log da Action) |
 | 20 | Auto-close atribui o fechamento a quem arrastou o card | Indistinguível de fechamento manual |
 | 21 | Auto-add leva alguns segundos e não é retroativo | Scripts/Actions devem tolerar o atraso |
+| 22 | PR mergeado via bypass mantém `reviewDecision = REVIEW_REQUIRED` | Lógica de status: checar merged antes de aprovado |
+| 23 | `ProjectV2Owner` é interface: `login` exige `... on User` / `... on Organization` | Usar fragmentos inline |
+| 24 | Única diferença user × org nas consultas é a raiz (`user(login:)` × `organization(login:)`) | Script parametrizado por `OWNER_TYPE` |
+| 25 | Mover card não gera evento na Issue nem notificação | Mudança de Status é "silenciosa" para quem acompanha a Issue |
 
 ---
 
-## 11. Decisões
+## 12. Decisões
 
 ### Tomadas
 
@@ -585,10 +744,10 @@ gh api graphql -f query='{ repository(owner:"OWNER", name:"REPO"){ issue(number:
 
 ---
 
-## 12. Próximas etapas
+## 13. Próximas etapas
 
 - [x] Etapa 4 — Workflows nativos
-- [ ] Etapa 5 — GraphQL na mão
+- [x] Etapa 5 — GraphQL na mão
 - [ ] Etapa 6 — Credencial (PAT/App) e Secrets
 - [ ] Etapa 7 — Actions: Draft PR, In Review, Approved, Merge/Closed
 - [ ] Etapa 8 — Casos de borda
