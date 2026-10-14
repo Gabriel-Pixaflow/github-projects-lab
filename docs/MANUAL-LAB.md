@@ -646,7 +646,7 @@ scripts/project-status.sh --issue 4 --status Backlog --dry-run  # uma Issue, sem
 | Sem `--status` | `ERRO: --status é obrigatório`, exit 1 |
 | Project inexistente | `gh: Could not resolve to a ProjectV2 with the number 99`, exit 1 |
 | `--issue 4 --status Backlog` real, 2× | 1ª: `'Draft PR' → 'Backlog'`; 2ª: `já está em 'Backlog'` |
-| `--pr` logo após abrir o PR desta etapa | ver PR da Etapa 5 |
+| `--pr 12 --status "Draft PR"` logo após abrir o PR #12 (simulação da Etapa 7a) | `#11: 'Backlog' → 'Draft PR'`, **sem precisar de retry** (a resolução do Project deu tempo ao vínculo). O caminho do retry ainda não foi exercitado → Etapa 8 |
 
 ### 9.7 `.gitattributes`
 
