@@ -227,10 +227,10 @@ Criar Issue
 | Etapa | Status | Data | Observações |
 |---|---|---|---|
 | Análise inicial | ✅ Concluída | 2026-10-14 | Diretório vazio, sem git, `gh` sem escopo `project` |
-| 0. Pré-requisitos | ⏳ Pendente | | |
-| 1. Repositório | ⏳ Pendente | | |
-| 2. Project V2 | ⏳ Pendente | | |
-| 3. Conceitos na prática | ⏳ Pendente | | |
+| 0. Pré-requisitos | ✅ Concluída | 2026-10-14 | Conta pessoal, repo público. Escopo `project` via `gh auth refresh -h github.com -s project` (precisa de terminal interativo) |
+| 1. Repositório | ✅ Concluída | 2026-10-14 | Commits com e-mail noreply (config local). Remote HTTPS + `gh auth setup-git` (SSH negado para a conta). Ruleset "Proteção da main": PR + 1 aprovação, dismiss stale reviews, bypass de admin só via PR |
+| 2. Project V2 | ✅ Concluída | 2026-10-14 | Status com 8 opções (IDs de Todo/In Progress/Done preservados). Campos Priority, Size, Iteration (6 sprints). Views Kanban, Sprint atual, Tabela, Roadmap. Group by/sort/datas do Roadmap só pela interface |
+| 3. Conceitos na prática | 🚧 Em andamento | 2026-10-14 | Labels `area:*`, milestones por trimestre, Issues #3/#4, Draft Issue. 6 workflows nativos já vêm ligados; *Item closed* manda *not planned* para Done |
 | 4. Workflows nativos | ⏳ Pendente | | |
 | 5. GraphQL na mão | ⏳ Pendente | | |
 | 6. Credencial | ⏳ Pendente | | |
