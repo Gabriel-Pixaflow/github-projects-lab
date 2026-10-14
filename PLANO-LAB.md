@@ -232,7 +232,7 @@ Criar Issue
 | 2. Project V2 | ✅ Concluída | 2026-10-14 | Status com 8 opções (IDs de Todo/In Progress/Done preservados). Campos Priority, Size, Iteration (6 sprints). Views Kanban, Sprint atual, Tabela, Roadmap. Group by/sort/datas do Roadmap só pela interface |
 | 3. Conceitos na prática | ✅ Concluída | 2026-10-14 | Labels `area:*`, milestones por trimestre, Issues #3/#4, Draft Issue. Ciclo manual #3 → PR #5: nativos cobrem início (Item added, PR linked) e fim (Item closed); Draft PR/In Review/Approved exigem Actions. Detalhes em `docs/MANUAL-LAB.md` |
 | 4. Workflows nativos | ✅ Concluída | 2026-10-14 | Auto-add (`is:issue is:open`) + Item added → Backlog, Item reopened → To Do, Auto-archive 14 dias, *PR linked* desligado. Testes T1–T8 com as Issues #8 e #9 |
-| 5. GraphQL na mão | ⏳ Pendente | | |
+| 5. GraphQL na mão | ✅ Concluída | 2026-10-14 | Consultas ①–④ executadas manualmente; `scripts/project-status.sh` (IDs por nome, retry, idempotente, `--dry-run`); `.gitattributes` com LF |
 | 6. Credencial | ⏳ Pendente | | |
 | 7. Actions (a–d) | ⏳ Pendente | | |
 | 8. Casos de borda | ⏳ Pendente | | |
