@@ -231,7 +231,7 @@ Criar Issue
 | 1. Repositório | ✅ Concluída | 2026-10-14 | Commits com e-mail noreply (config local). Remote HTTPS + `gh auth setup-git` (SSH negado para a conta). Ruleset "Proteção da main": PR + 1 aprovação, dismiss stale reviews, bypass de admin só via PR |
 | 2. Project V2 | ✅ Concluída | 2026-10-14 | Status com 8 opções (IDs de Todo/In Progress/Done preservados). Campos Priority, Size, Iteration (6 sprints). Views Kanban, Sprint atual, Tabela, Roadmap. Group by/sort/datas do Roadmap só pela interface |
 | 3. Conceitos na prática | ✅ Concluída | 2026-10-14 | Labels `area:*`, milestones por trimestre, Issues #3/#4, Draft Issue. Ciclo manual #3 → PR #5: nativos cobrem início (Item added, PR linked) e fim (Item closed); Draft PR/In Review/Approved exigem Actions. Detalhes em `docs/MANUAL-LAB.md` |
-| 4. Workflows nativos | ⏳ Pendente | | |
+| 4. Workflows nativos | ✅ Concluída | 2026-10-14 | Auto-add (`is:issue is:open`) + Item added → Backlog, Item reopened → To Do, Auto-archive 14 dias, *PR linked* desligado. Testes T1–T8 com as Issues #8 e #9 |
 | 5. GraphQL na mão | ⏳ Pendente | | |
 | 6. Credencial | ⏳ Pendente | | |
 | 7. Actions (a–d) | ⏳ Pendente | | |
